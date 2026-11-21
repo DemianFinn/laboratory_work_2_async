@@ -23,7 +23,7 @@ heavy_compute. Она синхронная и работает 1-3 секунд�
   Сделайте тяжёлыми трёх клиентов: bob, dave и eve. Сравните общее время
   для to_thread и для пула процессов. Почему оно отличается? Вспомните GIL.
 """
-
+from concurrent.futures import ProcessPoolExecutor
 import asyncio
 
 from timer import log, print_time
@@ -45,15 +45,31 @@ def heavy_compute() -> int:
     return h
 
 
-async def handle_request(client: str, duration: float) -> None:
+
+async def handle_request(
+    client: str,
+    duration: float,
+    pool: ProcessPoolExecutor
+) -> None:
     log(f"{client}: запрос принят")
-    await asyncio.sleep(duration)
+
+    if client in ("bob", "dave", "eve"):
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(pool, heavy_compute)
+    else:
+        await asyncio.sleep(duration)
+
     log(f"{client}: ответ отправлен")
 
 
 async def main() -> None:
-    coroutines = [handle_request(client, duration) for client, duration in CLIENTS]
-    await asyncio.gather(*coroutines)
+    with ProcessPoolExecutor(max_workers=3) as pool:
+        coroutines = [
+            handle_request(client, duration, pool)
+            for client, duration in CLIENTS
+        ]
+
+        await asyncio.gather(*coroutines)
 
 
 if __name__ == "__main__":
